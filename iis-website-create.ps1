@@ -1,3 +1,5 @@
+## Creates a new IIS website. The initial binding will use http port
+
 ## --------------------------------------------------------------------------------------
 ## Input
 ## --------------------------------------------------------------------------------------
@@ -15,7 +17,7 @@ param(
 $webSiteName = $applicationPoolName #will be identical to pool name
 $bindingProtocol = "http"
 $bindingIpAddress = "*"
-$bindingSslThumbprint = "" #project will not use SSL 
+$bindingSslThumbprint = "" #project will not use SSL
 $iisAuthentication = "Anonymous" #The authentication mode to use for the new website (can be Anonymous, Basic or Windows)
 $webSiteStart = "true"  #false if you don't want the website started after it is created
 $anonymousAuthentication = "Anonymous"
@@ -32,14 +34,14 @@ function Validate-Parameter($foo, [string[]]$validInput, $parameterName) {
     if (! $foo) {
         throw "$parameterName cannot be empty, please specify a value"
     }
-    
+
     if ($validInput) {
-        @($foo) | % { 
+        @($foo) | % {
                 if ($validInput -notcontains $_) {
                     throw "'$_' is not a valid input for '$parameterName'"
                 }
-             }  
-        }   
+             }
+        }
 }
 
 # Helper to run a block with a retry if things go wrong
@@ -65,7 +67,7 @@ function Execute-WithRetry([ScriptBlock] $command) {
 		} catch [System.Exception] {
 			if ($attemptCount -lt ($maxFailures)) {
 				Write-Output ("Attempt $attemptCount of $maxFailures failed: " + $_.Exception.Message)
-			
+
 			}
 			else {
 			    throw "Failed to execute command"
@@ -113,12 +115,12 @@ $wsBindings = new-object System.Collections.ArrayList
 $wsBindings.Add(@{ protocol=$bindingProtocol;bindingInformation=$bindingInformation }) | Out-Null
 if (! [string]::IsNullOrEmpty($bindingSslThumbprint)) {
     $wsBindings.Add(@{ thumbprint=$bindingSslThumbprint }) | Out-Null
-    
+
     $sslCertificateThumbprint = $bindingSslThumbprint.Trim()
     Write-Output "Finding SSL certificate with thumbprint $sslCertificateThumbprint"
-    
+
     $certificate = Get-ChildItem Cert:\\LocalMachine -Recurse | Where-Object { $_.Thumbprint -eq $sslCertificateThumbprint -and $_.HasPrivateKey -eq $true } | Select-Object -first 1
-    if (! $certificate) 
+    if (! $certificate)
     {
         throw "Could not find certificate under Cert:\\LocalMachine with thumbprint $sslCertificateThumbprint. Make sure that the certificate is installed to the Local Machine context and that the private key is available."
     }
@@ -132,13 +134,13 @@ if (! [string]::IsNullOrEmpty($bindingSslThumbprint)) {
 
     $sslBindingsPath = ("IIS:\\SslBindings" + $bindingIpAddress + "!" + $port)
 
-	Execute-WithRetry { 
+	Execute-WithRetry {
 		$sslBinding = get-item $sslBindingsPath -ErrorAction SilentlyContinue
 		if (! $sslBinding) {
 			New-Item $sslBindingsPath -Value $certificate | Out-Null
 		} else {
 			Set-Item $sslBindingsPath -Value $certificate | Out-Null
-		}		
+		}
 	}
 }
 
@@ -150,11 +152,11 @@ pushd IIS:\\
 
 $appPoolPath = ("IIS:\\AppPools\" + $applicationPoolName)
 
-Execute-WithRetry { 
+Execute-WithRetry {
     Write-Output "Finding application pool $applicationPoolName"
 	$pool = Get-Item $appPoolPath -ErrorAction SilentlyContinue
-	if (!$pool) { 
-		throw "Application pool $applicationPoolName does not exist" 
+	if (!$pool) {
+		throw "Application pool $applicationPoolName does not exist"
 	}
 }
 
@@ -163,37 +165,37 @@ $sitePath = ("IIS:\\Sites\" + $webSiteName)
 Write-Output $sitePath
 
 $site = Get-Item $sitePath -ErrorAction SilentlyContinue
-if (!$site) { 
-	Write-Output "Creating web site $webSiteName" 
+if (!$site) {
+	Write-Output "Creating web site $webSiteName"
 	$id = (dir iis:\\sites | foreach {$_.id} | sort -Descending | select -first 1) + 1
 	new-item $sitePath -bindings ($wsBindings[0]) -id $id -physicalPath $webRoot -confirm:$false
 } else {
 	write-host "Web site $webSiteName already exists"
 }
 
-$cmd = { 
+$cmd = {
 	Write-Output "Assigning website to application pool: $applicationPoolName"
 	Set-ItemProperty $sitePath -name applicationPool -value $applicationPoolName
 }
 Execute-WithRetry -Command $cmd
 
-Execute-WithRetry { 
+Execute-WithRetry {
 	Write-Output "Setting home directory: $webRoot"
 	Set-ItemProperty $sitePath -name physicalPath -value "$webRoot"
 }
 
 try {
-	Execute-WithRetry { 
+	Execute-WithRetry {
 		Write-Output "Anonymous authentication enabled: $enableAnonymous"
 		Set-WebConfigurationProperty -filter /system.webServer/security/authentication/anonymousAuthentication -name enabled -value "$enableAnonymous" -location $WebSiteName -PSPath "IIS:"
 	}
 
-	Execute-WithRetry { 
+	Execute-WithRetry {
 		Write-Output "Basic authentication enabled: $enableBasic"
 		Set-WebConfigurationProperty -filter /system.webServer/security/authentication/basicAuthentication -name enabled -value "$enableBasic" -location $WebSiteName -PSPath "IIS:"
 	}
 
-	Execute-WithRetry { 
+	Execute-WithRetry {
 		Write-Output "Windows authentication enabled: $enableWindows"
 		Set-WebConfigurationProperty -filter /system.webServer/security/authentication/windowsAuthentication -name enabled -value "$enableWindows" -location $WebSiteName -PSPath "IIS:"
 	}
@@ -205,7 +207,7 @@ try {
 # It can take a while for the App Pool to come to life
 Start-Sleep -s 1
 
-Execute-WithRetry { 
+Execute-WithRetry {
 	$state = Get-WebAppPoolState $applicationPoolName
 	if ($state.Value -eq "Stopped") {
 		Write-Output "Application pool is stopped. Attempting to start..."
@@ -214,7 +216,7 @@ Execute-WithRetry {
 }
 
 if($webSiteStart -eq $true) {
-    Execute-WithRetry { 
+    Execute-WithRetry {
     	$state = Get-WebsiteState $webSiteName
     	if ($state.Value -eq "Stopped") {
     		Write-Output "Web site is stopped. Attempting to start..."
