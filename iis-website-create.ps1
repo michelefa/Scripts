@@ -1,4 +1,4 @@
-## Creates a new IIS website. The initial binding will use http port
+## Creates a new IIS website together with a single HTTP binding. 
 
 ## --------------------------------------------------------------------------------------
 ## Input
