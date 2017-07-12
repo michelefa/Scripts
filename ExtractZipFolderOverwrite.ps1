@@ -1,6 +1,8 @@
 ﻿<#
-Extras an archive into a destination folder. 
-Checks if file exists in the destinatio and overwrites
+Extracts an archive into a destination folder. 
+Checks if file exists in the destination and overwrites.
+
+This script should be used when a clean is being performed on the destination folder. 
 #>
 
 param(
